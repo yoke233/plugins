@@ -18,7 +18,8 @@
 
 @interface FLTImagePickerPlugin () <UINavigationControllerDelegate,
                                     UIImagePickerControllerDelegate,
-                                    PHPickerViewControllerDelegate>
+                                    PHPickerViewControllerDelegate,
+                                    UIAdaptivePresentationControllerDelegate>
 
 @property(copy, nonatomic) FlutterResult result;
 
@@ -92,6 +93,7 @@ typedef NS_ENUM(NSInteger, ImagePickerClassType) { UIImagePickerClassType, PHPic
 
   _pickerViewController = [[PHPickerViewController alloc] initWithConfiguration:config];
   _pickerViewController.delegate = self;
+  _pickerViewController.presentationController.delegate = self;
 
   self.maxImagesAllowed = maxImagesAllowed;
 
@@ -373,41 +375,52 @@ typedef NS_ENUM(NSInteger, ImagePickerClassType) { UIImagePickerClassType, PHPic
   return imageQuality;
 }
 
+- (void)presentationControllerDidDismiss:(UIPresentationController *)presentationController {
+  if (self.result != nil) {
+    self.result(nil);
+    self.result = nil;
+    self->_arguments = nil;
+  }
+}
+
 - (void)picker:(PHPickerViewController *)picker
     didFinishPicking:(NSArray<PHPickerResult *> *)results API_AVAILABLE(ios(14)) {
   [picker dismissViewControllerAnimated:YES completion:nil];
-  dispatch_queue_t backgroundQueue =
-      dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
-  dispatch_async(backgroundQueue, ^{
+  
     if (results.count == 0) {
-      self.result(nil);
-      self.result = nil;
-      self->_arguments = nil;
+      if (self.result != nil) {
+        self.result(nil);
+        self.result = nil;
+        self->_arguments = nil;
+      }
       return;
-    }
-    NSNumber *maxWidth = [self->_arguments objectForKey:@"maxWidth"];
-    NSNumber *maxHeight = [self->_arguments objectForKey:@"maxHeight"];
-    NSNumber *imageQuality = [self->_arguments objectForKey:@"imageQuality"];
-    NSNumber *desiredImageQuality = [self getDesiredImageQuality:imageQuality];
-    NSOperationQueue *operationQueue = [NSOperationQueue new];
-    NSMutableArray *pathList = [self createNSMutableArrayWithSize:results.count];
+    }  
+    dispatch_queue_t backgroundQueue =
+    dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_BACKGROUND, 0);
+    dispatch_async(backgroundQueue, ^{
+      NSNumber *maxWidth = [self->_arguments objectForKey:@"maxWidth"];
+      NSNumber *maxHeight = [self->_arguments objectForKey:@"maxHeight"];
+      NSNumber *imageQuality = [self->_arguments objectForKey:@"imageQuality"];
+      NSNumber *desiredImageQuality = [self getDesiredImageQuality:imageQuality];
+      NSOperationQueue *operationQueue = [NSOperationQueue new];
+      NSMutableArray *pathList = [self createNSMutableArrayWithSize:results.count];
 
-    for (int i = 0; i < results.count; i++) {
-      PHPickerResult *result = results[i];
-      FLTPHPickerSaveImageToPathOperation *operation =
-          [[FLTPHPickerSaveImageToPathOperation alloc] initWithResult:result
-                                                            maxHeight:maxHeight
-                                                             maxWidth:maxWidth
-                                                  desiredImageQuality:desiredImageQuality
-                                                       savedPathBlock:^(NSString *savedPath) {
-                                                         pathList[i] = savedPath;
-                                                       }];
-      [operationQueue addOperation:operation];
-    }
-    [operationQueue waitUntilAllOperationsAreFinished];
-    dispatch_async(dispatch_get_main_queue(), ^{
-      [self handleSavedPathList:pathList];
-    });
+      for (int i = 0; i < results.count; i++) {
+        PHPickerResult *result = results[i];
+        FLTPHPickerSaveImageToPathOperation *operation =
+            [[FLTPHPickerSaveImageToPathOperation alloc] initWithResult:result
+                                                              maxHeight:maxHeight
+                                                              maxWidth:maxWidth
+                                                    desiredImageQuality:desiredImageQuality
+                                                        savedPathBlock:^(NSString *savedPath) {
+                                                          pathList[i] = savedPath;
+                                                        }];
+        [operationQueue addOperation:operation];
+      }
+      [operationQueue waitUntilAllOperationsAreFinished];
+      dispatch_async(dispatch_get_main_queue(), ^{
+        [self handleSavedPathList:pathList];
+      });
   });
 }
 
