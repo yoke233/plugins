@@ -250,7 +250,8 @@ public class ImagePickerDelegate
     Intent pickVideoIntent = new Intent(Intent.ACTION_GET_CONTENT);
     pickVideoIntent.setType("video/*");
 
-    activity.startActivityForResult(pickVideoIntent, REQUEST_CODE_CHOOSE_VIDEO_FROM_GALLERY);
+    activity.startActivityForResult(Intent.createChooser(pickVideoIntent,""),
+      REQUEST_CODE_CHOOSE_VIDEO_FROM_GALLERY);
   }
 
   public void takeVideoWithCamera(MethodCall methodCall, MethodChannel.Result result) {
